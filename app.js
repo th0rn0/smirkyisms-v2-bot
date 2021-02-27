@@ -34,6 +34,13 @@ const commandQuote = commandId + 'smirketpin';
 const commandGet = commandId + 'smirketget';
 const commandRandom = commandId + 'smirketrandom';
 
+// Functions
+
+require('./functions/api/confirm.js');
+require('./functions/api/leave.js');
+require('./functions/api/upload.js');
+require('./functions/api/get.js');
+
 // Bot
 client.login(botToken);
 
@@ -47,38 +54,17 @@ client.on("guildCreate", guild => {
     console.log("Joined a new guild: " + guild.name);
     console.log("Generating Token");
     // var token = createToken(guild);
-    createToken(guild).then( async token => {
-	    //Your other stuff like adding to guildArray
-		return axios.post(
-			apiAddr + '/api/bot/con', 
-			{
-				guild_id: guild.id,
-				token: token,
-			}
-	    ).then(function (response) {
-	    	console.log("Server Confirmed");
-	    	return response;
-		}).catch(function (error) {
-			console.log(error);
-			throw new Error(error);
-		});
+    createServerToken(guild).then( async token => {
+    	confirmServer(guild.id, token)
 	});
 });
 
 // Server Leave
 client.on("guildDelete", guild => {
     console.log("Left a guild: " + guild.name);
-    return axios.post(
-		apiAddr + '/api/bot/lev', 
-		{
-			guild_id: guild.id
-		}
-    ).then(function (response) {
-    	return response;
-	}).catch(function (error) {
-		console.log(error);
-		throw new Error(error);
-	})
+    getServerToken(guild).then( async serverToken => {
+    	leaveServer(guild.id, serverToken.token)
+	});
 });
 
 client.on('message', message => {
@@ -102,14 +88,13 @@ client.on('message', message => {
 						guild_id: provokeMessage.guild.id,
 						token: serverToken.token,
 					}
-			    ).then(function (response) {
+			    ).then( async response => {
 			    	console.log("Server Acknowledged");
 
     				// Images
 					// Send each Image individually
 					messages[0].forEach( message => {
 						var imageArray = new Array();
-						var videoArray = new Array();
 						// Only get Images & Videos
 						if (message.attachments.size > 0) {
 							message.attachments.forEach(function(attachment) {
@@ -121,6 +106,7 @@ client.on('message', message => {
 						if (message.attachments.size > 0 && imageArray.length > 0) {
 							// Image
 							imageArray.forEach(function(url) {
+								console.log('we in here');
 								var attachment = new MessageAttachment(url);
 								var voteMessageText = '\n Fair Sik... Starting a 30 Second Vote... \n \n Vote Now!';
 								message.channel.send(voteMessageText, attachment).then( voteMessage => {
@@ -157,7 +143,7 @@ client.on('message', message => {
 							    			message.author.username, 
 							    			provokeMessage.author.username,
 							    			message.channel.name, 
-							    			serverToken.token, 
+							    			serverToken, 
 							    			apiAddr
 						    			).then( response => {
 				    						console.log(response);
@@ -168,8 +154,7 @@ client.on('message', message => {
 												.setFooter('Smirkyisms')
 												.setTimestamp();
 											provokeMessage.channel.send(embed);
-											return true;
-							    		}).catch( error => {
+							    		}).catch( error => { 
 											console.log(error);
 											provokeMessage.channel.send('There was a error! ' + error);
 							    		})
@@ -181,7 +166,13 @@ client.on('message', message => {
 
 					// Send Text as one Quote. If they want separate they should send the IDs separately
 					// Check if every message is from the same person
+					console.log('asdasd');
+					console.log(messages);
 					messageCheck = true;
+					if (messages[1].length == 0) {
+						messageCheck = false;
+					}
+					// TEXT IS ON [1]. IMAGES IS ON [0]
 					messages[1].forEach(message => {
 						if (messages[1][0].author.username != message.author.username) {
 							messages[1][0].channel.send('Messages not sent by the same person!');
@@ -227,7 +218,7 @@ client.on('message', message => {
 										messages[1][0].author.username,
 										provokeMessage.author.username,
 										messages[1][0].channel.name,
-										serverToken.token,
+										serverToken,
 										apiAddr
 									).then(response => {
 										console.log('response');
@@ -252,12 +243,13 @@ client.on('message', message => {
 						});
 					}
 				}).catch(function (error) {
-					throw new Error(error);
+					provokeMessage.channel.send('Cannot Authenticate Bot to Server. ' + error);
 				});
 			}).catch(function (error) {
-				throw new Error(error);
+				provokeMessage.channel.send('Cannot Authenticate Bot to Server. ' + error);
+				// throw new Error(error);
 			});
-		}).catch( error => {
+		}).catch( function (error) {
 			console.log(error)
 			message.channel.send('A Message ID Not Recognized. Try Again!');
 		});
@@ -290,7 +282,7 @@ async function getServerToken(guild) {
 	  .value()
 }
 
-async function createToken(guild) {
+async function createServerToken(guild) {
 	var token = Base64.encode(randomString(5) + guild.id);
 	db.get('servers')
 		.push({ id: guild.id, token: token })
@@ -342,141 +334,6 @@ async function concatMessages(messages) {
 	return concatStr.join(',\n');
 }
 
-async function uploadQuote(quote, quoteBy, submittedBy, channelName, token, apiAddr) {
-	console.log('message');
-	return axios.post(
-		'http://localhost:8000/' + 'api/quote', 
-		{
-			text: quote,
-			quote_by: quoteBy,
-			submitted_by: submittedBy,
-			channel_name: channelName,
-			token: token,
-		}
-    ).then(function (response) {
-    	return response;
-	}).catch(function (error) {
-		console.log(error);
-		throw new Error(error);
-	})
-}
-
-async function uploadImage(url, imageBy, submittedBy, channelName, token, apiAddr) {
-	var formData = new FormData();
-    formData.append('image_by', imageBy);
-    formData.append('submitted_by', submittedBy);
-    formData.append('channel_name', channelName);
-    formData.append('token', token);
-
-    await formData.append('image', request(url));
-
-    const headers = Object.assign({}, formData.getHeaders());
-
-	return axios.post(
-		'http://localhost:8000/' + 'api/image', 
-		formData,
-		{
-	      	headers: headers
-    	}
-    ).then(function (response) {
-    	return response;
-	}).catch(function (error) {
-		console.log(error);
-		throw new Error(error);
-	});
-}
-
-async function uploadVideo(url, submittedBy, apiAddr) {
-	return axios.post('https://smirkyisms.eu.auth0.com/oauth/token',
-		{
-			client_id: auth0ClientId,
-			client_secret: auth0ClientSecret,
-			audience: auth0Audience,
-			grant_type: "client_credentials"
-		}
-	).then(async function (auth) {
-		var formData = new FormData();
-        formData.append('type', 'discord');
-        formData.append('submitted_by', 'auth0BotUserId');
-		formData.append('discord_submitted_by', submittedBy);
-        await formData.append('video', request(url));
-
-
-        const headers = Object.assign({
-		    'Authorization': `Bearer ${auth.data.access_token}`,
-		}, formData.getHeaders());
-
-		return axios.post(
-			apiAddr + '/video', 
-			formData,
-			{
-		      	headers: headers
-	    	}
-	    ).then(function (response) {
-	    	return response;
-		}).catch(function (error) {
-			console.log(error);
-			throw new Error(error);
-		})
-	});
-}
-
 function attachIsImage(url) {
     return(url.match(/\.(jpeg|jpg|gif|png)$/) != null);
-}
-
-function attachIsVideo(url) {
-    return(url.match(/\.(mp4|m4v|avi|mpg)$/) != null);
-}
-
-async function getRandom(message, apiAddr) {
-	var attachment = null;
-
-	var type;
-
-	if (message.content.toLowerCase().indexOf('image') != -1) {
-		type = 0;
-	}
-
-	if (message.content.toLowerCase().indexOf('quote') != -1) {
-		type = 1;
-	}
-
-	if (type == null) {
-		type = Math.floor(Math.random() * 2);
-	}
-	
-    if (type == 0) {
-		axios.get('http://localhost:8000/api/image/random')
-		.then(function (response) {
-			console.log(response.data.id);
-			axios.get(apiAddr + '/api/image/' + response.data.id + '/file')
-			// axios.get(apiAddr + '/api/image/file')
-			.then(function (fileRes) {
-				console.log(fileRes.data);
-				console.log(response.data);
-				var attachment = new MessageAttachment(new Buffer.from(fileRes.data, 'base64'));
-				var embed = "Courtesy of " + response.data.submitted_by;
-				message.channel.send(embed, attachment);
-			}).catch(function (error) {
-				message.channel.send('Sorry there was a error. Try again. ' + error);
-			});
-		});
-	} else if (type == 1) {
-		axios.get('http://localhost:8000/api/quote/random')
-		.then(function (response) {
-			console.log(response);
-			var embed = new MessageEmbed()
-				.setColor('#0099ff')
-				.addField('Quote', response.data.text)
-				.addField('Quote By', response.data.quote_by)
-				.addField('Submitted By', response.data.submitted_by)
-				.addField('Go Check it out!', 'https://smirkyisms.com/quotes/' + response.data.id)
-				.setFooter('Smirkyisms')
-				.setTimestamp();	
-			message.channel.send(embed);
-		}).catch(function (error) {
-			message.channel.send('Sorry there was a error. Try again. ' + error);
-		});
-	}
 }
