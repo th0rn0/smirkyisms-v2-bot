@@ -50,12 +50,180 @@ client.on('ready', () => {
 });
 
 // Server Join
+
+async function uploadQuote(quote, quoteBy, submittedBy, guild, serverToken, apiAddr) {
+	console.log('Upload Message');
+	return axios.post(
+		apiAddr + '/api/quote', 
+		{
+			text: quote,
+			quote_by: quoteBy.author.username,
+			quote_by_id: quoteBy.author.id,
+			submitted_by: submittedBy.author.username,
+			submitted_by_id: submittedBy.author.id,
+			channel_name: quoteBy.channel.name,
+			channel_id: quoteBy.channel.id,
+			guild_id: guild.id,
+			guild_name: guild.name,
+			token: serverToken.token,
+		}
+    ).then(function (response) {
+    	return response;
+	}).catch(function (error) {
+		console.log(error);
+		throw new Error(error);
+	})
+}
+
+async function uploadImage(url, imageBy, submittedBy, guild, serverToken, apiAddr) {
+	var formData = new FormData();
+    formData.append('image_by', imageBy.author.username);
+    formData.append('image_by_id', imageBy.author.id);
+    formData.append('submitted_by', submittedBy.author.username);
+    formData.append('submitted_by_id', submittedBy.author.id);
+    formData.append('channel_name', imageBy.channel.name);
+    formData.append('channel_id', imageBy.channel.id);
+    formData.append('guild_id', guild.id);
+    formData.append('guild_name', guild.name);
+    formData.append('token', serverToken.token);
+
+    await formData.append('image', request(url));
+
+    const headers = Object.assign({}, formData.getHeaders());
+
+	return axios.post(
+		apiAddr + '/api/image', 
+		formData,
+		{
+	      	headers: headers
+    	}
+    ).then(function (response) {
+    	return response;
+	}).catch(function (error) {
+		console.log(error);
+		throw new Error(error);
+	});
+}
+
+async function getRandom(message, apiAddr) {
+	var attachment = null;
+
+	var type;
+
+	if (message.content.toLowerCase().indexOf('image') != -1) {
+		type = 0;
+	}
+
+	if (message.content.toLowerCase().indexOf('quote') != -1) {
+		type = 1;
+	}
+
+	if (type == null) {
+		type = Math.floor(Math.random() * 2);
+	}
+	
+    if (type == 0) {
+		axios.get('http://localhost:8000/api/image/random')
+		.then(function (response) {
+			axios.get(apiAddr + '/api/image/' + response.data.data.id + '/file')
+			// axios.get(apiAddr + '/api/image/file')
+			.then(function (fileRes) {
+				// DEBUG
+				console.log(fileRes.data);
+				console.log(response.data);
+				var attachment = new MessageAttachment(new Buffer.from(fileRes.data, 'base64'));
+				var embed = "Courtesy of " + response.data.data.submitted_by;
+				message.channel.send(embed, attachment);
+			}).catch(function (error) {
+				message.channel.send('Sorry there was a error. Try again. ' + error);
+			});
+		});
+	} else if (type == 1) {
+		axios.get('http://localhost:8000/api/quote/random')
+		.then(function (response) {
+			console.log(response);
+			var embed = new MessageEmbed()
+				.setColor('#0099ff')
+				.addField('Quote', response.data.data.text)
+				.addField('Quote By', response.data.data.quote_by)
+				.addField('Submitted By', response.data.data.submitted_by)
+				.addField('Go Check it out!', 'https://smirkyisms.com/quotes/' + response.data.data.id)
+				.setFooter('Smirkyisms')
+				.setTimestamp();	
+			message.channel.send(embed);
+		}).catch(function (error) {
+			message.channel.send('Sorry there was a error. Try again. ' + error);
+		});
+	}
+}
+
+
+// Confirm Server Join
+function confirmServer(guildId) {
+	return axios.post(
+		apiAddr + '/api/bot/con', 
+		{
+			guild_id: guildId
+		}
+	).then(function (response) {
+		console.log("Server Confirmed");
+		// TODO - Message server saying hello
+		db.get('servers')
+			.push({ id: guildId, token: response.data.data['token'] })
+			.write()
+		db.update('count', n => n + 1)
+	  		.write()
+		return response;
+	}).catch(function (error) {
+		console.log("Server Not Confirmed");
+		console.log(error);
+		throw new Error(error);
+	});
+}
+
+function leaveServer(guildId, token) {
+    return axios.post(
+		apiAddr + '/api/bot/lev', 
+		{
+			guild_id: guildId,
+			token: token,
+		}
+    ).then(function (response) {
+    	db.get('servers')
+			.remove({ id: guildId, token: token })
+			.write()
+		db.update('count', n => n - 1)
+	  		.write()
+    	return response;
+	}).catch(function (error) {
+		console.log(error);
+	})
+}
+
 client.on("guildCreate", guild => {
     console.log("Joined a new guild: " + guild.name);
-    console.log("Generating Token");
-    // var token = createToken(guild);
-    createServerToken(guild).then( async token => {
-    	confirmServer(guild.id, token)
+    console.log("Checking for Token");
+ 	
+ 	let channelID;
+    let channels = guild.channels.cache;
+
+    channelLoop:
+    for (let key in channels) {
+        let c = channels[key];
+        if (c[1].type === "text") {
+            channelID = c[0];
+            break channelLoop;
+        }
+    }
+
+    let channel = guild.channels.cache.get(guild.systemChannelID || channelID);
+
+
+	confirmServer(guild.id).then( response => {
+	    channel.send('Thanks for inviting me into this server! SOME USEFUL COMMANDS');
+	}).catch(function (error) {
+		console.log(error);
+	    channel.send('Something went wrong, I can\'t authenticate this server! Error: ' + error);
 	});
 });
 
@@ -140,9 +308,9 @@ client.on('message', message => {
 										message.channel.send('Vote was successful. Uploading to Smirkyisms.com...');
 							    		uploadImage(
 							    			url, 
-							    			message.author.username, 
-							    			provokeMessage.author.username,
-							    			message.channel.name, 
+							    			message, 
+							    			provokeMessage,
+							    			message.guild, 
 							    			serverToken, 
 							    			apiAddr
 						    			).then( response => {
@@ -150,7 +318,7 @@ client.on('message', message => {
 										    var embed = new MessageEmbed()
 												.setColor('#0099ff')
 												.addField('Submitted By', message.author.username)
-												.addField('Go Check it out!', 'https://smirkyisms.com/images/' + response.data.id)
+												.addField('Go Check it out!', 'https://smirkyisms.com/sb/' + response.data.data.team_images/' + response.data.data.id)
 												.setFooter('Smirkyisms')
 												.setTimestamp();
 											provokeMessage.channel.send(embed);
@@ -215,9 +383,9 @@ client.on('message', message => {
 									messages[1][0].channel.send('Vote was successful. Uploading to Smirkyisms.com...');
 									uploadQuote(
 										concatMessage,
-										messages[1][0].author.username,
-										provokeMessage.author.username,
-										messages[1][0].channel.name,
+										messages[1][0],
+										provokeMessage,
+										messages[1][0].guild,
 										serverToken,
 										apiAddr
 									).then(response => {
@@ -282,15 +450,15 @@ async function getServerToken(guild) {
 	  .value()
 }
 
-async function createServerToken(guild) {
-	var token = Base64.encode(randomString(5) + guild.id);
-	db.get('servers')
-		.push({ id: guild.id, token: token })
-		.write()
-	db.update('count', n => n + 1)
-  		.write()
-	return token;
-}
+// async function createServerToken(guild) {
+// 	var token = Base64.encode(randomString(5) + guild.id);
+// 	db.get('servers')
+// 		.push({ id: guild.id, token: token })
+// 		.write()
+// 	db.update('count', n => n + 1)
+//   		.write()
+// 	return token;
+// }
 
 async function randomString(length) {
    var result           = '';
