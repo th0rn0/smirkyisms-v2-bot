@@ -13,7 +13,7 @@ const { Base64 } = require('js-base64');
 const low = require('lowdb')
 const FileSync = require('lowdb/adapters/FileSync')
 
-const adapter = new FileSync('db.json')
+const adapter = new FileSync(process.env.DB_FILE)
 const db = low(adapter)
 
 db.defaults({ servers: [], count: 0 })
@@ -21,7 +21,7 @@ db.defaults({ servers: [], count: 0 })
 
 // Settings
 const voteTime = 10000;
-const botToken = process.env.DISCORD_TOKEN;
+const discordBotToken = process.env.DISCORD_TOKEN;
 const apiToken = process.env.API_TOKEN;
 const apiAddr = process.env.API_ADDR;
 const auth0ClientId = process.env.AUTH0_CLIENT_ID;
@@ -34,9 +34,10 @@ const commandId = '.';
 const commandQuote = commandId + 'smirketpin';
 const commandGet = commandId + 'smirketget';
 const commandRandom = commandId + 'smirketrandom';
+const commandHelp = commandId + 'smirkethelp';
 
 // Bot
-client.login(botToken);
+client.login(discordBotToken);
 
 client.on('ready', () => {
   console.info(`Logged in as ${client.user.tag}!`);
@@ -66,7 +67,7 @@ client.on("guildCreate", guild => {
 	    	channel.send('I already have a Entry for this Server. Please contact support!');
 		} else {
 			console.log("Guild Confirmed");
-		 	channel.send('Thanks for inviting me into this server! SOME USEFUL COMMANDS');	
+		 	channel.send('Thanks for inviting me into this server! Type ' + commandHelp + ' for help or visit https://smirkyisms.com.');	
 		}
 	} catch (error) {
 		console.log('Cannot find guild on API: ' + guild.name);
@@ -277,7 +278,7 @@ client.on('message', message => {
 	}
 
 	// Get Help
-	if (message.content.toLowerCase().startsWith('.help')) {
+	if (message.content.toLowerCase().startsWith(commandHelp)) {
 	    var embed = new MessageEmbed()
 			.setColor('#0099ff')
 			.setTitle('Heyup ' + message.author.username + '!')
@@ -423,6 +424,11 @@ function confirmServer(guildId) {
 		apiAddr + '/api/bot/con', 
 		{
 			guild_id: guildId
+		},
+		{
+			headers: {
+				'bot-token': apiToken
+			}
 		}
 	).then(function (response) {
 		db.get('servers')
@@ -440,6 +446,11 @@ function leaveServer(guildId, token) {
 		{
 			guild_id: guildId,
 			token: token,
+		},
+		{
+			headers: {
+				'bot-token': apiToken
+			}
 		}
     ).then(function (response) {
     	return response;

@@ -1,0 +1,5 @@
+.env
+src/.env
+src/db.json
+db.json
+tmp/
