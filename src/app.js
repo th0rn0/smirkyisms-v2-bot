@@ -13,7 +13,7 @@ const { Base64 } = require('js-base64');
 const low = require('lowdb')
 const FileSync = require('lowdb/adapters/FileSync')
 
-const adapter = new FileSync(process.env.DB_FILE)
+const adapter = new FileSync('database/db.json')
 const db = low(adapter)
 
 db.defaults({ servers: [], count: 0 })
@@ -24,10 +24,6 @@ const voteTime = 10000;
 const discordBotToken = process.env.DISCORD_TOKEN;
 const apiToken = process.env.API_TOKEN;
 const apiAddr = process.env.API_ADDR;
-const auth0ClientId = process.env.AUTH0_CLIENT_ID;
-const auth0ClientSecret = process.env.AUTH0_CLIENT_SECRET;
-const auth0Audience = process.env.AUTH0_AUDIENCE;
-const auth0BotUserId = process.env.AUTH0_BOT_USER_ID; 
 
 // Commands
 const commandId = '.';
@@ -61,18 +57,18 @@ client.on("guildCreate", guild => {
 
     let channel = guild.channels.cache.get(guild.systemChannelID || channelID);
 
-	try {
-		if (!confirmServer(guild.id)) {
-			console.log("Guild Exists!");
-	    	channel.send('I already have a Entry for this Server. Please contact support!');
-		} else {
-			console.log("Guild Confirmed");
-		 	channel.send('Thanks for inviting me into this server! Type ' + commandHelp + ' for help or visit https://smirkyisms.com.');	
-		}
-	} catch (error) {
+	if (db.get('servers').find({ id: guildId }).value()) {
+		console.log("Guild Exists!");
+    	channel.send('I already have a Entry for this Server. Please contact support!');
+	}
+	confirmServer(guild.id).then(function (response) {
+		console.log("Guild Confirmed");
+	 	channel.send('Thanks for inviting me into this server! Type ' + commandHelp + ' for help or visit https://smirkyisms.com.');
+	}).catch( function (error) {
 		console.log('Cannot find guild on API: ' + guild.name);
 	    channel.send('Something went wrong, I can\'t authenticate this server! Error: ' + error);
-	}
+	});
+	
 });
 
 // Server Leave
@@ -417,9 +413,6 @@ function getRandom(message, serverToken) {
 // Server Functions
 
 function confirmServer(guildId) {
-	if (db.get('servers').find({ id: guildId }).value()) {
-		return false;
-	}
 	return axios.post(
 		apiAddr + '/api/bot/con', 
 		{
