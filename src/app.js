@@ -26,7 +26,7 @@ const apiToken = process.env.API_TOKEN;
 const apiAddr = process.env.API_ADDR;
 
 // Commands
-const commandId = '.';
+const commandId = '/';
 const commandQuote = commandId + 'smirketpin';
 const commandGet = commandId + 'smirketget';
 const commandRandom = commandId + 'smirketrandom';
@@ -57,17 +57,18 @@ client.on("guildCreate", guild => {
 
     let channel = guild.channels.cache.get(guild.systemChannelID || channelID);
 
-	if (db.get('servers').find({ id: guildId }).value()) {
+	if (db.get('servers').find({ id: guild.id }).value()) {
 		console.log("Guild Exists!");
     	channel.send('I already have a Entry for this Server. Please contact support!');
+	} else {
+		confirmServer(guild.id).then(function (response) {
+			console.log("Guild Confirmed");
+			channel.send('Thanks for inviting me into this server! Type ' + commandHelp + ' for help or visit https://smirkyisms.com.');
+		}).catch( function (error) {
+			console.log('Cannot find guild on API: ' + guild.name);
+			channel.send('Something went wrong, I can\'t authenticate this server! Error: ' + error);
+		});
 	}
-	confirmServer(guild.id).then(function (response) {
-		console.log("Guild Confirmed");
-	 	channel.send('Thanks for inviting me into this server! Type ' + commandHelp + ' for help or visit https://smirkyisms.com.');
-	}).catch( function (error) {
-		console.log('Cannot find guild on API: ' + guild.name);
-	    channel.send('Something went wrong, I can\'t authenticate this server! Error: ' + error);
-	});
 	
 });
 
@@ -272,6 +273,7 @@ client.on('message', message => {
 			message.channel.send('Cannot Authenticate Bot to Server. ' + error);
 		});
 	}
+	console.log(message);
 
 	// Get Help
 	if (message.content.toLowerCase().startsWith(commandHelp)) {
