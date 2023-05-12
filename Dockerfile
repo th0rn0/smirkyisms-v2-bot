@@ -1,5 +1,5 @@
 FROM node:13
-MAINTAINER dev@th0rn0.co.uk
+LABEL Maintainer="Thornton Phillis (dev@th0rn0.co.uk)"
 
 ENV DB_FILE /database/db.json
 
